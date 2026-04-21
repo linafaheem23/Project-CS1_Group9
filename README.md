@@ -1,181 +1,334 @@
 /*
-CS1 Project
-Group 9
-*/
+ Hospital Emergency Room Queue System
+ */
 
 #include <iostream>
-#include <vector>
 #include <string>
-#include <queue>
-#include <fstream>
-#include <iomanip>
-#include <algorithm>
-
 using namespace std;
+
+const int MAX_PATIENTS = 100;
 
 struct Patient 
 {
-    int id;
+    int    id;
     string name;
-    int age;
+    int    age;
     string symptoms;
-    int priority; // 1 = Critical, 2 = Urgent, 3 = Normal
-    string status; // e.g., "Waiting", "Being Treated", "Treated" 
-
-    bool operator>(const Patient& other) const 
-    {
-        return priority > other.priority;
-    }
+    int    priority;  
+    string status;   
 };
 
-vector<Patient> allPatients;
-priority_queue<Patient, vector<Patient>, greater<Patient>> triageQueue;
+Patient patients[MAX_PATIENTS];
+int     patientCount = 0;
+int     nextId       = 1001;
 
-void mainMenu();
-void login();
-void doctorDashboard();
-void nurseDashboard();
-void patientDashboard(int patientID);
-void saveToFile();
-void loadFromFile();
 
-void saveToFile() 
+string getPriorityLabel(int p) 
 {
-    ofstream outFile("patients.txt");
-    for (const auto& p : allPatients) 
-    {
-        outFile << p.id << "|" << p.name << "|" << p.age << "|" << p.symptoms << "|" 
-                << p.priority << "|" << p.status << endl;
-    }
-    outFile.close();
+    if (p == 1) return "Critical";
+    if (p == 2) return "Urgent";
+    return "Normal";
 }
 
-void loadFromFile() 
+void printLine() 
 {
-    ifstream inFile("patients.txt");
-    if (!inFile) return;
+    cout << "----------------------------------------" << endl;
+}
 
-    allPatients.clear();
-    while (!triageQueue.empty()) triageQueue.pop();
-
-    string line;
-    while (getline(inFile, line)) 
+int findPatient(int id) {
+    for (int i = 0; i < patientCount; i++) 
     {
-      
+        if (patients[i].id == id)
+            return i;
     }
-    inFile.close();
+    return -1;
+}
+
+// Returns "doctor", "nurse", "patient", or "fail"
+string login() {
+    string username, password;
+    cout << "Username: "; cin >> username;
+    cout << "Password: "; cin >> password;
+
+    if (username == "doctor"  && password == "doc123")   return "doctor";
+    if (username == "nurse"   && password == "nurse123") return "nurse";
+    if (username == "patient" && password == "pat123")   return "patient";
+
+    return "fail";
+}
+
+void registerPatient() 
+{
+    if (patientCount >= MAX_PATIENTS) 
+    {
+        cout << "Queue is full!" << endl;
+        return;
+    }
+
+    Patient p;
+    p.id     = nextId++;
+    p.status = "Waiting";
+
+    cout << "Enter patient name: ";
+    cin.ignore();
+    getline(cin, p.name);
+
+    cout << "Enter age: ";
+    cin >> p.age;
+
+    cout << "Enter symptoms: ";
+    cin.ignore();
+    getline(cin, p.symptoms);
+
+    cout << "Enter priority (1=Critical, 2=Urgent, 3=Normal): ";
+    cin >> p.priority;
+
+    while (p.priority < 1 || p.priority > 3) {
+        cout << "Invalid! Enter 1, 2, or 3: ";
+        cin >> p.priority;
+    }
+
+    patients[patientCount] = p;
+    patientCount++;
+
+    cout << "Patient registered! ID: " << p.id << endl;
+}
+
+void updatePatient() 
+{
+    int id;
+    cout << "Enter patient ID to update: ";
+    cin >> id;
+
+    int i = findPatient(id);
+    if (i == -1) {
+        cout << "Patient not found." << endl;
+        return;
+    }
+
+    cout << "Current name    : " << patients[i].name     << endl;
+    cout << "Current symptoms: " << patients[i].symptoms << endl;
+    cout << "Current priority: " << getPriorityLabel(patients[i].priority) << endl;
+
+    cout << "New priority (1=Critical, 2=Urgent, 3=Normal): ";
+    int p; cin >> p;
+    if (p >= 1 && p <= 3)
+        patients[i].priority = p;
+
+    cout << "Patient updated!" << endl;
+}
+
+void removePatient() {
+    int id;
+    cout << "Enter patient ID to remove: ";
+    cin >> id;
+
+    int i = findPatient(id);
+    if (i == -1) {
+        cout << "Patient not found." << endl;
+        return;
+    }
+
+    // Shift array left to fill the gap
+    for (int j = i; j < patientCount - 1; j++)
+        patients[j] = patients[j + 1];
+
+    patientCount--;
+    cout << "Patient removed from queue." << endl;
+}
+
+void viewAllPatients() {
+    if (patientCount == 0) {
+        cout << "No patients in queue." << endl;
+        return;
+    }
+
+    cout << "ID    Name            Age  Priority  Status" << endl;
+    printLine();
+    for (int i = 0; i < patientCount; i++) {
+        cout << patients[i].id       << "   "
+             << patients[i].name     << "\t\t"
+             << patients[i].age      << "   "
+             << getPriorityLabel(patients[i].priority) << "\t"
+             << patients[i].status   << endl;
+    }
+}
+
+void treatNextPatient() {
+    int bestIndex = -1;
+
+    for (int i = 0; i < patientCount; i++) {
+        if (patients[i].status == "Waiting") {
+            if (bestIndex == -1 || patients[i].priority < patients[bestIndex].priority)
+                bestIndex = i;
+        }
+    }
+
+    if (bestIndex == -1) {
+        cout << "No patients waiting." << endl;
+        return;
+    }
+
+    patients[bestIndex].status = "Treated";
+    cout << "Now treating: " << patients[bestIndex].name
+         << " (ID: " << patients[bestIndex].id << ")"
+         << " - " << getPriorityLabel(patients[bestIndex].priority) << endl;
+    cout << "Symptoms: " << patients[bestIndex].symptoms << endl;
+}
+
+void searchPatient() 
+{
+    int id;
+    cout << "Enter patient ID: ";
+    cin >> id;
+
+    int i = findPatient(id);
+    if (i == -1) {
+        cout << "Patient not found." << endl;
+        return;
+    }
+
+    printLine();
+    cout << "ID      : " << patients[i].id       << endl;
+    cout << "Name    : " << patients[i].name     << endl;
+    cout << "Age     : " << patients[i].age      << endl;
+    cout << "Symptoms: " << patients[i].symptoms << endl;
+    cout << "Priority: " << getPriorityLabel(patients[i].priority) << endl;
+    cout << "Status  : " << patients[i].status   << endl;
+    printLine();
+}
+
+void viewWaitingTimes() 
+{
+    if (patientCount == 0) {
+        cout << "No patients in queue." << endl;
+        return;
+    }
+    cout << "ID    Name            Priority  Est. Wait" << endl;
+    printLine();
+    for (int i = 0; i < patientCount; i++) {
+        if (patients[i].status == "Waiting") {
+            int wait = patients[i].priority * 10; // Simple estimate in minutes
+            cout << patients[i].id   << "   "
+                 << patients[i].name << "\t\t"
+                 << getPriorityLabel(patients[i].priority) << "\t"
+                 << wait << " min" << endl;
+        }
+    }
+}
+
+void viewMyStatus() {
+    int id;
+    cout << "Enter your patient ID: ";
+    cin >> id;
+
+    int i = findPatient(id);
+    if (i == -1) {
+        cout << "ID not found." << endl;
+        return;
+    }
+
+    int position = 1;
+    for (int j = 0; j < i; j++) {
+        if (patients[j].status == "Waiting")
+            position++;
+    }
+
+    printLine();
+    cout << "Name          : " << patients[i].name   << endl;
+    cout << "Status        : " << patients[i].status << endl;
+    cout << "Priority      : " << getPriorityLabel(patients[i].priority) << endl;
+    if (patients[i].status == "Waiting") {
+        cout << "Queue position: #" << position << endl;
+        cout << "Est. wait time: ~" << patients[i].priority * 10 << " min" << endl;
+    }
+    printLine();
 }
 
 
-void nurseDashboard() 
-{
+void doctorMenu() {
     int choice;
     do {
-        cout << "\n--- Nurse Dashboard ---" << endl;
-        cout << "1. Register Patient\n2. Update Patient Information\n3. Remove Patient\n4. Logout" << endl;
-        cout << "Enter choice: ";
-        cin >> choice;
+        cout << "\n=== DOCTOR MENU ===" << endl;
+        cout << "1. View All Patients"    << endl;
+        cout << "2. Treat Next Patient"   << endl;
+        cout << "3. Search Patient by ID" << endl;
+        cout << "4. View Waiting Times"   << endl;
+        cout << "0. Logout"               << endl;
+        cout << "Choice: ";
+        cin  >> choice;
 
-        if (choice == 1) 
-        {
-            Patient p;
-            cout << "Enter ID: "; cin >> p.id;
-            cout << "Enter Name: "; cin.ignore(); getline(cin, p.name);
-            cout << "Enter Age: "; cin >> p.age;
-            cout << "Enter Symptoms: "; cin.ignore(); getline(cin, p.symptoms);
-            cout << "Enter Priority (1-Critical, 2-Urgent, 3-Normal): "; cin >> p.priority;
-            p.status = "Waiting";
-            
-            allPatients.push_back(p);
-            triageQueue.push(p); [cite: 89]
-            cout << "Patient registered successfully!" << endl;
-        } 
-        else if (choice == 3) 
-        {
-            cout << "Feature: Patient removed from queue." << endl; [cite: 61]
-        }
-    } while (choice != 4);
+        if      (choice == 1) viewAllPatients();
+        else if (choice == 2) treatNextPatient();
+        else if (choice == 3) searchPatient();
+        else if (choice == 4) viewWaitingTimes();
+        else if (choice == 0) cout << "Logged out." << endl;
+        else                  cout << "Invalid choice." << endl;
+
+    } while (choice != 0);
 }
 
-void doctorDashboard() 
-{
+void nurseMenu() {
     int choice;
-    do 
-    {
-        cout << "\n--- Doctor Dashboard ---" << endl;
-        cout << "1. View Patients\n2. Treat Next Patient\n3. View Waiting Time\n4. Logout" << endl;
-        cout << "Enter choice: ";
-        cin >> choice;
+    do {
+        cout << "\n=== NURSE MENU ===" << endl;
+        cout << "1. Register New Patient" << endl;
+        cout << "2. Update Patient"       << endl;
+        cout << "3. Remove Patient"       << endl;
+        cout << "4. View All Patients"    << endl;
+        cout << "0. Logout"               << endl;
+        cout << "Choice: ";
+        cin  >> choice;
 
-        if (choice == 1) 
-        {
-            cout << "\n--- Patient List (Priority Order) ---" << endl;
-            priority_queue<Patient, vector<Patient>, greater<Patient>> temp = triageQueue;
-            while (!temp.empty()) 
-            {
-                Patient p = temp.top();
-                cout << "ID: " << p.id << " | Name: " << p.name << " | Priority: " << p.priority << endl;
-                temp.pop();
-            }
-        } 
-        else if (choice == 2) {
-            if (!triageQueue.empty()) 
-            {
-                Patient p = triageQueue.top();
-                triageQueue.pop(); [cite: 42]
-                cout << "Treating Patient: " << p.name << " (Priority: " << p.priority << ")" << endl;
-            } else 
-            {
-                cout << "No patients in queue." << endl;
-            }
-        }
-    } while (choice != 4);
+        if      (choice == 1) registerPatient();
+        else if (choice == 2) updatePatient();
+        else if (choice == 3) removePatient();
+        else if (choice == 4) viewAllPatients();
+        else if (choice == 0) cout << "Logged out." << endl;
+        else                  cout << "Invalid choice." << endl;
+
+    } while (choice != 0);
 }
 
-void patientDashboard(int patientID) 
-{
-    cout << "\n--- Patient Status ---" << endl;
-    bool found = false;
-    for (const auto& p : allPatients) 
-    {
-        if (p.id == patientID) 
-        {
-            cout << "Name: " << p.name << endl;
-            cout << "Status: " << p.status << endl;
-            cout << "Priority Level: " << p.priority << endl;
-            cout << "Estimated Wait: " << (p.priority * 15) << " minutes." << endl;
-            found = true;
-            break;
-        }
-    }
-    if (!found) cout << "Patient ID not found." << endl;
-}
+void patientMenu() {
+    int choice;
+    do {
+        cout << "\n=== PATIENT MENU ===" << endl;
+        cout << "1. View My Status" << endl;
+        cout << "0. Logout"         << endl;
+        cout << "Choice: ";
+        cin  >> choice;
 
-void login() 
-{
-    int role;
-    cout << "\nSelect Role:\n1. Doctor\n2. Nurse\n3. Patient\nEnter: ";
-    cin >> role;
+        if      (choice == 1) viewMyStatus();
+        else if (choice == 0) cout << "Logged out." << endl;
+        else                  cout << "Invalid choice." << endl;
 
-    switch (role) {
-        case 1: doctorDashboard(); break; [cite: 54]
-        case 2: nurseDashboard(); break; [cite: 58]
-        case 3: 
-            int id;
-            cout << "Enter your Patient ID: "; cin >> id;
-            patientDashboard(id); break; [cite: 63]
-        default: cout << "Invalid role." << endl;
-    }
+    } while (choice != 0);
 }
 
 int main() {
-    cout << "Welcome to the Hospital Emergency Room Queue System" << endl; [cite: 3]
-    while (true) {
-        cout << "\n1. Login\n2. Exit\nEnter choice: ";
-        int choice;
-        cin >> choice;
-        if (choice == 1) login();
-        else break;
-    }
+    cout << "====================================" << endl;
+    cout << "   Hospital ER Queue System"         << endl;
+    cout << "====================================" << endl;
+
+    int choice;
+    do {
+        cout << "\n1. Login" << endl;
+        cout << "0. Exit"   << endl;
+        cout << "Choice: ";
+        cin  >> choice;
+
+        if (choice == 1) {
+            string role = login();
+
+            if      (role == "fail")    cout << "Wrong username or password." << endl;
+            else if (role == "doctor")  doctorMenu();
+            else if (role == "nurse")   nurseMenu();
+            else if (role == "patient") patientMenu();
+        }
+
+    } while (choice != 0);
+
+    cout << "Goodbye!" << endl;
     return 0;
 }
